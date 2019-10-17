@@ -1,6 +1,7 @@
 #include "Aimbot.h"
 #include "../Config.h"
 #include "../Interfaces.h"
+#include "../SDK/Surface.h"
 #include "../Memory.h"
 #include "../SDK/ConVar.h"
 #include "../SDK/Entity.h"
@@ -91,7 +92,6 @@ static bool canScan(Entity* localPlayer, Entity* entity, const Vector& destinati
     }
     return false;
 }
-
 void Aimbot::run(UserCmd* cmd) noexcept
 {
     const auto localPlayer = interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer());
@@ -107,6 +107,7 @@ void Aimbot::run(UserCmd* cmd) noexcept
         return;
 
     auto weaponClass = getWeaponClass(activeWeapon->itemDefinitionIndex2());
+
     if (!config.aimbot[weaponIndex].enabled)
         weaponIndex = weaponClass;
 
@@ -133,7 +134,6 @@ void Aimbot::run(UserCmd* cmd) noexcept
     }
 
     if (config.aimbot[weaponIndex].enabled && (cmd->buttons & UserCmd::IN_ATTACK || config.aimbot[weaponIndex].autoShot || config.aimbot[weaponIndex].aimlock) && activeWeapon->getInaccuracy() <= config.aimbot[weaponIndex].maxAimInaccuracy) {
-
         if (config.aimbot[weaponIndex].scopedOnly && activeWeapon->isSniperRifle() && !localPlayer->isScoped())
             return;
 

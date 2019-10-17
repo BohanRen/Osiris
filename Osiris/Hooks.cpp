@@ -407,7 +407,15 @@ static void* __stdcall getDemoPlaybackParameters() noexcept
     }
     return result;
 }
-
+char* UnicodeToUtf8(const wchar_t* unicode)
+{
+	int len;
+	len = WideCharToMultiByte(CP_UTF8, 0, unicode, -1, NULL, 0, NULL, NULL);
+	char* szUtf8 = (char*)malloc(len + 1);
+	memset(szUtf8, 0, len + 1);
+	WideCharToMultiByte(CP_UTF8, 0, unicode, -1, szUtf8, len, NULL, NULL);
+	return szUtf8;
+}
 Hooks::Hooks() noexcept
 {
     SkinChanger::initializeKits();
@@ -447,7 +455,7 @@ Hooks::Hooks() noexcept
     *memory.dispatchSound = reinterpret_cast<uintptr_t>(&dispatchSound) - reinterpret_cast<uintptr_t>(memory.dispatchSound + 1);
     VirtualProtect(memory.dispatchSound, 4, oldProtection, NULL);
 
-    interfaces.gameUI->messageBox("This was a triumph!", "Osiris has been successfully loaded.");
+	interfaces.gameUI->messageBox(UnicodeToUtf8(L"BobHCsgo2.0"), UnicodeToUtf8(L"更新了新功能,自行探索"));
 }
 
 void Hooks::restore() noexcept

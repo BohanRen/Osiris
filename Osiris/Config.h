@@ -46,6 +46,7 @@ public:
         int minDamage{ 1 };
         bool killshot{ false };
         bool betweenShots{ true };
+		bool aimbotCircle{ true };
     };
     std::array<Aimbot, 40> aimbot;
 
@@ -120,7 +121,7 @@ public:
             float outlineColor[3]{ 0.0f, 0.0f, 0.0f };
             bool distance{ false };
             float distanceColor[3]{ 1.0f, 1.0f, 1.0f };
-            float maxDistance{ 0.0f };
+			int maxsnaplineDistance{ 10000 };
         };
        
         struct Player : public Shared {
@@ -138,17 +139,13 @@ public:
             float moneyColor[3]{ 1.0f, 1.0f, 1.0f };
             bool headDot{ false };
             float headDotColor[3]{ 1.0f, 1.0f, 1.0f };
-            bool activeWeapon{ false };
-            float activeWeaponColor[3]{ 1.0f, 1.0f, 1.0f };
+			int maxEspDistance{ 10000 };
         };
 
         struct Weapon : public Shared { } weapon;
 
-        struct Projectile : public Shared { };
-        std::array<Projectile, 9> projectiles;
-
         struct DangerZone : public Shared { };
-        std::array<DangerZone, 4> dangerZone;
+        std::array<DangerZone, 2> dangerZone;
 
         std::array<Player, 6> players;
     } esp;
@@ -248,6 +245,7 @@ public:
         int quickHealthshotKey{ 0 };
         bool nadePredict{ false };
         float maxAngleDelta{ 255.0f };
+		bool showRoundPeople{ false };
     } misc;
 
     struct {

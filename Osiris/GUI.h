@@ -49,7 +49,6 @@ private:
 
     struct {
         ImFont* tahoma;
-        ImFont* segoeui;
     } fonts;
 };
 

@@ -26,6 +26,9 @@ static constexpr bool worldToScreen(const Vector& in, Vector& out) noexcept
 static constexpr void renderSnaplines(Entity* entity, const Config::Esp::Shared& config) noexcept
 {
     if (config.snaplines) {
+		const auto localPlayer = interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer());
+		float distance = (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length();
+		if (distance > config.maxsnaplineDistance) return;
         Vector position{ };
         if (worldToScreen(entity->getAbsOrigin(), position)) {
             const auto [width, height] = interfaces.surface->getScreenSize();
@@ -65,18 +68,20 @@ static constexpr void renderPositionedText(unsigned font, const wchar_t* text, c
 }
 
 struct BoundingBox {
-    float x0, y0;
-    float x1, y1;
+    float left;
+    float right;
+    float top;
+    float bottom;
     Vector vertices[8];
 };
 
 static auto boundingBox(Entity* entity, BoundingBox& out) noexcept
 {
     const auto [width, height] { interfaces.surface->getScreenSize() };
-    out.x0 = static_cast<float>(width * 2);
-    out.y0 = static_cast<float>(height * 2);
-    out.x1 = -static_cast<float>(width * 2);
-    out.y1 = -static_cast<float>(height * 2);
+    out.left = static_cast<float>(width * 2);
+    out.right = -static_cast<float>(width * 2);
+    out.top = -static_cast<float>(height * 2);
+    out.bottom = static_cast<float>(height * 2);
 
     const auto min{ entity->getCollideable()->obbMins() };
     const auto max{ entity->getCollideable()->obbMaxs() };
@@ -89,17 +94,17 @@ static auto boundingBox(Entity* entity, BoundingBox& out) noexcept
         if (!worldToScreen(point.transform(entity->coordinateFrame()), out.vertices[i]))
             return false;
 
-        if (out.x0 > out.vertices[i].x)
-            out.x0 = out.vertices[i].x;
+        if (out.left > out.vertices[i].x)
+            out.left = out.vertices[i].x;
 
-        if (out.y0 > out.vertices[i].y)
-            out.y0 = out.vertices[i].y;
+        if (out.right < out.vertices[i].x)
+            out.right = out.vertices[i].x;
 
-        if (out.x1 < out.vertices[i].x)
-            out.x1 = out.vertices[i].x;
+        if (out.top < out.vertices[i].y)
+            out.top = out.vertices[i].y;
 
-        if (out.y1 < out.vertices[i].y)
-            out.y1 = out.vertices[i].y;
+        if (out.bottom > out.vertices[i].y)
+            out.bottom = out.vertices[i].y;
     }
     return true;
 }
@@ -111,34 +116,34 @@ static void renderBox(Entity* entity, const BoundingBox& bbox, const Config::Esp
 
         switch (config.boxType) {
         case 0:
-            interfaces.surface->drawOutlinedRect(bbox.x0, bbox.y0, bbox.x1, bbox.y1);
+            interfaces.surface->drawOutlinedRect(bbox.left, bbox.bottom, bbox.right, bbox.top);
 
             if (config.outline) {
                 interfaces.surface->setDrawColor(config.outlineColor, 255);
-                interfaces.surface->drawOutlinedRect(bbox.x0 + 1, bbox.y0 + 1, bbox.x1 - 1, bbox.y1 - 1);
-                interfaces.surface->drawOutlinedRect(bbox.x0 - 1, bbox.y0 - 1, bbox.x1 + 1, bbox.y1 + 1);
+                interfaces.surface->drawOutlinedRect(bbox.left + 1, bbox.bottom + 1, bbox.right - 1, bbox.top - 1);
+                interfaces.surface->drawOutlinedRect(bbox.left - 1, bbox.bottom - 1, bbox.right + 1, bbox.top + 1);
             }
             break;
         case 1:
-            interfaces.surface->drawLine(bbox.x0, bbox.y0, bbox.x0, bbox.y0 + fabsf(bbox.y1 - bbox.y0) / 4);
-            interfaces.surface->drawLine(bbox.x0, bbox.y0, bbox.x0 + fabsf(bbox.x1 - bbox.x0) / 4, bbox.y0);
-            interfaces.surface->drawLine(bbox.x1, bbox.y0, bbox.x1 - fabsf(bbox.x1 - bbox.x0) / 4, bbox.y0);
-            interfaces.surface->drawLine(bbox.x1, bbox.y0, bbox.x1, bbox.y0 + fabsf(bbox.y1 - bbox.y0) / 4);
-            interfaces.surface->drawLine(bbox.x0, bbox.y1, bbox.x0, bbox.y1 - fabsf(bbox.y1 - bbox.y0) / 4);
-            interfaces.surface->drawLine(bbox.x0, bbox.y1, bbox.x0 + fabsf(bbox.x1 - bbox.x0) / 4, bbox.y1);
-            interfaces.surface->drawLine(bbox.x1, bbox.y1, bbox.x1 - fabsf(bbox.x1 - bbox.x0) / 4, bbox.y1);
-            interfaces.surface->drawLine(bbox.x1, bbox.y1, bbox.x1, bbox.y1 - fabsf(bbox.y1 - bbox.y0) / 4);
+            interfaces.surface->drawLine(bbox.left, bbox.bottom, bbox.left, bbox.bottom + fabsf(bbox.top - bbox.bottom) / 4);
+            interfaces.surface->drawLine(bbox.left, bbox.bottom, bbox.left + fabsf(bbox.right - bbox.left) / 4, bbox.bottom);
+            interfaces.surface->drawLine(bbox.right, bbox.bottom, bbox.right - fabsf(bbox.right - bbox.left) / 4, bbox.bottom);
+            interfaces.surface->drawLine(bbox.right, bbox.bottom, bbox.right, bbox.bottom + fabsf(bbox.top - bbox.bottom) / 4);
+            interfaces.surface->drawLine(bbox.left, bbox.top, bbox.left, bbox.top - fabsf(bbox.top - bbox.bottom) / 4);
+            interfaces.surface->drawLine(bbox.left, bbox.top, bbox.left + fabsf(bbox.right - bbox.left) / 4, bbox.top);
+            interfaces.surface->drawLine(bbox.right, bbox.top, bbox.right - fabsf(bbox.right - bbox.left) / 4, bbox.top);
+            interfaces.surface->drawLine(bbox.right, bbox.top, bbox.right, bbox.top - fabsf(bbox.top - bbox.bottom) / 4);
 
             if (config.outline) {
                 interfaces.surface->setDrawColor(config.outlineColor, 255);
-                interfaces.surface->drawLine(bbox.x0 - 1, bbox.y0 - 1, bbox.x0 - 1, bbox.y0 + fabsf(bbox.y1 - bbox.y0) / 4);
-                interfaces.surface->drawLine(bbox.x0 - 1, bbox.y0 - 1, bbox.x0 + fabsf(bbox.x1 - bbox.x0) / 4, bbox.y0 - 1);
-                interfaces.surface->drawLine(bbox.x1 + 1, bbox.y0 - 1, bbox.x1 - fabsf(bbox.x1 - bbox.x0) / 4, bbox.y0 - 1);
-                interfaces.surface->drawLine(bbox.x1 + 1, bbox.y0 - 1, bbox.x1 + 1, bbox.y0 + fabsf(bbox.y1 - bbox.y0) / 4);
-                interfaces.surface->drawLine(bbox.x0 - 1, bbox.y1 + 1, bbox.x0 - 1, bbox.y1 - fabsf(bbox.y1 - bbox.y0) / 4);
-                interfaces.surface->drawLine(bbox.x0 - 1, bbox.y1 + 1, bbox.x0 + fabsf(bbox.x1 - bbox.x0) / 4, bbox.y1 + 1);
-                interfaces.surface->drawLine(bbox.x1 + 1, bbox.y1 + 1, bbox.x1 - fabsf(bbox.x1 - bbox.x0) / 4, bbox.y1 + 1);
-                interfaces.surface->drawLine(bbox.x1 + 1, bbox.y1 + 1, bbox.x1 + 1, bbox.y1 - fabsf(bbox.y1 - bbox.y0) / 4);
+                interfaces.surface->drawLine(bbox.left - 1, bbox.bottom - 1, bbox.left - 1, bbox.bottom + fabsf(bbox.top - bbox.bottom) / 4);
+                interfaces.surface->drawLine(bbox.left - 1, bbox.bottom - 1, bbox.left + fabsf(bbox.right - bbox.left) / 4, bbox.bottom - 1);
+                interfaces.surface->drawLine(bbox.right + 1, bbox.bottom - 1, bbox.right - fabsf(bbox.right - bbox.left) / 4, bbox.bottom - 1);
+                interfaces.surface->drawLine(bbox.right + 1, bbox.bottom - 1, bbox.right + 1, bbox.bottom + fabsf(bbox.top - bbox.bottom) / 4);
+                interfaces.surface->drawLine(bbox.left - 1, bbox.top + 1, bbox.left - 1, bbox.top - fabsf(bbox.top - bbox.bottom) / 4);
+                interfaces.surface->drawLine(bbox.left - 1, bbox.top + 1, bbox.left + fabsf(bbox.right - bbox.left) / 4, bbox.top + 1);
+                interfaces.surface->drawLine(bbox.right + 1, bbox.top + 1, bbox.right - fabsf(bbox.right - bbox.left) / 4, bbox.top + 1);
+                interfaces.surface->drawLine(bbox.right + 1, bbox.top + 1, bbox.right + 1, bbox.top - fabsf(bbox.top - bbox.bottom) / 4);
             }
             break;
         case 2:
@@ -176,7 +181,7 @@ static void renderPlayerBox(Entity* entity, const Config::Esp::Player& config) n
     if (BoundingBox bbox; boundingBox(entity, bbox)) {
         renderBox(entity, bbox, config);
 
-        float drawPositionX = bbox.x0 - 5;
+        float drawPositionX = bbox.left - 5;
 
         if (config.healthBar) {
             static auto gameType{ interfaces.cvar->findVar("game_type") };
@@ -185,22 +190,22 @@ static void renderPlayerBox(Entity* entity, const Config::Esp::Player& config) n
             const auto maxHealth{ (std::max)((gameType->getInt() == 6 ? survivalMaxHealth->getInt() : 100), entity->health()) };
 
             interfaces.surface->setDrawColor(config.healthBarColor, 255);
-            interfaces.surface->drawFilledRect(drawPositionX - 3, bbox.y0 + abs(bbox.y1 - bbox.y0) * (maxHealth - entity->health()) / static_cast<float>(maxHealth), drawPositionX, bbox.y1);
+            interfaces.surface->drawFilledRect(drawPositionX - 3, bbox.bottom + abs(bbox.top - bbox.bottom) * (maxHealth - entity->health()) / static_cast<float>(maxHealth), drawPositionX, bbox.top);
             
             if (config.outline) {
                 interfaces.surface->setDrawColor(config.outlineColor, 255);
-                interfaces.surface->drawOutlinedRect(drawPositionX - 4, bbox.y0 - 1, drawPositionX + 1, bbox.y1 + 1);
+                interfaces.surface->drawOutlinedRect(drawPositionX - 4, bbox.bottom - 1, drawPositionX + 1, bbox.top + 1);
             }
             drawPositionX -= 7;
         }
 
         if (config.armorBar) {
             interfaces.surface->setDrawColor(config.armorBarColor, 255);
-            interfaces.surface->drawFilledRect(drawPositionX - 3, bbox.y0 + abs(bbox.y1 - bbox.y0) * (100.0f - entity->armor()) / 100.0f, drawPositionX, bbox.y1);
+            interfaces.surface->drawFilledRect(drawPositionX - 3, bbox.bottom + abs(bbox.top - bbox.bottom) * (100.0f - entity->armor()) / 100.0f, drawPositionX, bbox.top);
             
             if (config.outline) {
                 interfaces.surface->setDrawColor(config.outlineColor, 255);
-                interfaces.surface->drawOutlinedRect(drawPositionX - 4, bbox.y0 - 1, drawPositionX + 1, bbox.y1 + 1);
+                interfaces.surface->drawOutlinedRect(drawPositionX - 4, bbox.bottom - 1, drawPositionX + 1, bbox.top + 1);
             }
             drawPositionX -= 7;
         }
@@ -213,37 +218,37 @@ static void renderPlayerBox(Entity* entity, const Config::Esp::Player& config) n
                     const auto [width, height] { interfaces.surface->getTextSize(config.font, name) };
                     interfaces.surface->setTextFont(config.font);
                     interfaces.surface->setTextColor(config.nameColor, 255);
-                    interfaces.surface->setTextPosition(bbox.x0 + (fabsf(bbox.x1 - bbox.x0) - width) / 2, bbox.y0 - 5 - height);
+                    interfaces.surface->setTextPosition(bbox.left + (fabsf(bbox.right - bbox.left) - width) / 2, bbox.bottom - 5 - height);
                     interfaces.surface->printText(name);
                 }
             }
         }
 
-        if (const auto activeWeapon{ entity->getActiveWeapon() };  config.activeWeapon && activeWeapon) {
-            const auto name{ interfaces.localize->find(activeWeapon->getWeaponData()->name) };
-            const auto [width, height] { interfaces.surface->getTextSize(config.font, name) };
-            interfaces.surface->setTextFont(config.font);
-            interfaces.surface->setTextColor(config.activeWeaponColor, 255);
-            interfaces.surface->setTextPosition(bbox.x0 + (bbox.x1 - bbox.x0 - width) * 0.5f, bbox.y1 + 5);
-            interfaces.surface->printText(name);
-        }     
-
-        float drawPositionY = bbox.y0;
+        float drawPositionY = bbox.bottom;
 
         if (config.health)
-            renderPositionedText(config.font, (std::to_wstring(entity->health()) + L" HP").c_str(), config.healthColor, { bbox.x1 + 5, drawPositionY });
+            renderPositionedText(config.font, (std::to_wstring(entity->health()) + L" HP").c_str(), config.healthColor, { bbox.right + 5, drawPositionY });
 
         if (config.armor)
-            renderPositionedText(config.font, (std::to_wstring(entity->armor()) + L" AR").c_str(), config.armorColor, { bbox.x1 + 5, drawPositionY });
+            renderPositionedText(config.font, (std::to_wstring(entity->armor()) + L" AR").c_str(), config.armorColor, { bbox.right + 5, drawPositionY });
 
         if (config.money)
-            renderPositionedText(config.font, (L'$' + std::to_wstring(entity->account())).c_str(), config.moneyColor, { bbox.x1 + 5, drawPositionY });
+            renderPositionedText(config.font, (L'$' + std::to_wstring(entity->account())).c_str(), config.moneyColor, { bbox.right + 5, drawPositionY });
 
         if (const auto localPlayer{ interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer()) }; config.distance)
-            renderPositionedText(config.font, (std::wostringstream{ } << std::fixed << std::showpoint << std::setprecision(2) << (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length() * 0.0254f << L'm').str().c_str(), config.distanceColor, { bbox.x1 + 5, drawPositionY });
+            renderPositionedText(config.font, (std::wostringstream{ } << std::fixed << std::showpoint << std::setprecision(2) << (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length() * 0.0254f << L'm').str().c_str(), config.distanceColor, { bbox.right + 5, drawPositionY });
     }
 }
-
+struct WeaponRenderTextBox {
+	int posx, posy, width, height;
+	bool canRender;
+	Entity* entity;
+	float distance;
+	bool operator == (const WeaponRenderTextBox& b) const {
+		return posx == b.posx && posy == b.posy && width == b.width && height == b.height;
+	}
+};
+std::vector<WeaponRenderTextBox> drawList;
 static void renderWeaponBox(Entity* entity, const Config::Esp::Weapon& config) noexcept
 {
     if (BoundingBox bbox; boundingBox(entity, bbox)) {
@@ -252,19 +257,113 @@ static void renderWeaponBox(Entity* entity, const Config::Esp::Weapon& config) n
         if (config.name) {
             const auto name{ interfaces.localize->find(entity->getWeaponData()->name) };
             const auto [width, height] { interfaces.surface->getTextSize(config.font, name) };
+
+			//interfaces.surface->setDrawColor(config.nameColor, 255);
+			//interfaces.surface->drawFilledRect(bbox.left + (bbox.right - bbox.left - width) / 2, bbox.top + 5, bbox.left + (bbox.right - bbox.left - width) / 2+width, bbox.top + 5+height);
+			/*
             interfaces.surface->setTextFont(config.font);
             interfaces.surface->setTextColor(config.nameColor, 255);
-            interfaces.surface->setTextPosition(bbox.x0 + (bbox.x1 - bbox.x0 - width) * 0.5f, bbox.y1 + 5);
+            interfaces.surface->setTextPosition(bbox.left + (bbox.right - bbox.left - width) / 2, bbox.top + 5);
             interfaces.surface->printText(name);
+			*/
+			const auto localPlayer{ interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer()) };
+			drawList.push_back({ static_cast<int>(bbox.left + (bbox.right - bbox.left - width) / 2), static_cast<int>(bbox.top + 5) ,static_cast<int>(width),static_cast<int>(height),true,entity,(entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length()});
         }
 
-        float drawPositionY = bbox.y0;
+        float drawPositionY = bbox.bottom;
 
         if (const auto localPlayer{ interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer()) }; config.distance)
-            renderPositionedText(config.font, (std::wostringstream{ } << std::fixed << std::showpoint << std::setprecision(2) << (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length() * 0.0254f << L'm').str().c_str(), config.distanceColor, { bbox.x1 + 5, drawPositionY });
+            renderPositionedText(config.font, (std::wostringstream{ } << std::fixed << std::showpoint << std::setprecision(2) << (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length() * 0.0254f << L'm').str().c_str(), config.distanceColor, { bbox.right + 5, drawPositionY });
     }
 }
-
+const int eps = 30;
+static bool isOverlap(WeaponRenderTextBox& a, WeaponRenderTextBox& b) {
+	bool ret = false;
+	if (b.posx - a.posx >= 0 && b.posx - a.posx <= a.width + eps && b.posy - a.posy >= 0 && b.posy - a.posy <= a.height + eps) ret = true;
+	std::swap(a, b);
+	if (b.posx - a.posx >= 0 && b.posx - a.posx <= a.width + eps && b.posy - a.posy >= 0 && b.posy - a.posy <= a.height + eps) ret = true;
+	std::swap(a, b);
+	return ret;
+}
+int Scnt[10][10];
+int haveDraw[10][10];
+int minBlockPos[10][10][2];
+inline bool cmp(const WeaponRenderTextBox& a, const WeaponRenderTextBox& b) {
+	return a.distance < b.distance;
+}
+static void renderWeaponNameList(const Config::Esp::Weapon& config) noexcept {
+	const auto [Swidth, Sheight] = interfaces.surface->getScreenSize();
+	float avgWidth = Swidth / 6.0;
+	float avgHeight = Sheight / 6.0;
+	memset(Scnt,0,sizeof Scnt);
+	memset(haveDraw, 0, sizeof haveDraw);
+	memset(minBlockPos,0x3f,sizeof minBlockPos);
+	sort(drawList.begin(),drawList.end(),cmp);
+	for (WeaponRenderTextBox& a : drawList) {
+		int nowx = a.posx / avgWidth;
+		int nowy = a.posy / avgHeight;
+		if (nowx >= 10 || nowy >= 10) continue;
+		if (nowx < 0 || nowy < 0) continue;
+		Scnt[nowx][nowy]++;
+		minBlockPos[nowx][nowy][0] = min(minBlockPos[nowx][nowy][0], a.posx);
+		minBlockPos[nowx][nowy][1] = min(minBlockPos[nowx][nowy][1], a.posy);
+	}
+	for (WeaponRenderTextBox& a : drawList) {
+		const auto name{ interfaces.localize->find(a.entity->getWeaponData()->name) };
+		const auto [width, height] { interfaces.surface->getTextSize(config.font, name) };
+		int nowx = a.posx / avgWidth;
+		int nowy = a.posy / avgHeight;
+		if (nowx >= 10 || nowy >= 10) continue;
+		if (nowx < 0 || nowy < 0) continue;
+		if (Scnt[nowx][nowy] <= 1) {
+			interfaces.surface->setTextFont(config.font);
+			interfaces.surface->setTextColor(config.nameColor, 255);
+			interfaces.surface->setTextPosition(a.posx, a.posy);
+			interfaces.surface->printText(name);
+		}
+		else {
+			if ((haveDraw[nowx][nowy] + 1) * height <= avgHeight) {
+				interfaces.surface->setTextFont(config.font);
+				interfaces.surface->setTextColor(config.nameColor, 255);
+				interfaces.surface->setTextPosition(minBlockPos[nowx][nowy][0], minBlockPos[nowx][nowy][1] + haveDraw[nowx][nowy] * height);
+				interfaces.surface->printText(name);
+				haveDraw[nowx][nowy]++;
+			}
+		}
+	}
+	/*
+	for (WeaponRenderTextBox &a : drawList) {
+		if (!a.canRender) continue;
+		const auto name{ interfaces.localize->find(a.entity->getWeaponData()->name) };
+		const auto [width, height] { interfaces.surface->getTextSize(config.font, name) };
+		int drawCnt = 0;
+		int nowy = a.posy;
+		interfaces.surface->setTextFont(config.font);
+		interfaces.surface->setTextColor(config.nameColor, 255);
+		interfaces.surface->setTextPosition(a.posx, a.posy);
+		interfaces.surface->printText(name);
+		drawCnt++;
+		nowy += height;
+		a.canRender = false;
+		for (WeaponRenderTextBox &b : drawList) {
+			if (a == b) continue;
+			if (!b.canRender) continue;
+			if (!isOverlap(a, b)) continue;
+			if (drawCnt <= 6) {
+				const auto name1{ interfaces.localize->find(b.entity->getWeaponData()->name) };
+				const auto [width1, height1] { interfaces.surface->getTextSize(config.font, name1) };
+				interfaces.surface->setTextFont(config.font);
+				interfaces.surface->setTextColor(config.nameColor, 255);
+				interfaces.surface->setTextPosition(a.posx, nowy);
+				interfaces.surface->printText(name1);
+				b.canRender = false;
+				drawCnt++;
+				nowy += height1;
+			}
+		}
+	}
+	*/
+}
 static void renderEntityBox(Entity* entity, const Config::Esp::Shared& config, const wchar_t* name) noexcept
 {
     if (BoundingBox bbox; boundingBox(entity, bbox)) {
@@ -274,14 +373,14 @@ static void renderEntityBox(Entity* entity, const Config::Esp::Shared& config, c
             const auto [width, height] { interfaces.surface->getTextSize(config.font, name) };
             interfaces.surface->setTextFont(config.font);
             interfaces.surface->setTextColor(config.nameColor, 255);
-            interfaces.surface->setTextPosition(bbox.x0 + (bbox.x1 - bbox.x0 - width) * 0.5f, bbox.y1 + 5);
+            interfaces.surface->setTextPosition(bbox.left + (bbox.right - bbox.left - width) / 2, bbox.top + 5);
             interfaces.surface->printText(name);
         }
 
-        float drawPositionY = bbox.y0;
+        float drawPositionY = bbox.bottom;
 
         if (const auto localPlayer{ interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer()) }; config.distance)
-            renderPositionedText(config.font, (std::wostringstream{ } << std::fixed << std::showpoint << std::setprecision(2) << (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length() * 0.0254f << L'm').str().c_str(), config.distanceColor, { bbox.x1 + 5, drawPositionY });
+            renderPositionedText(config.font, (std::wostringstream{ } << std::fixed << std::showpoint << std::setprecision(2) << (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length() * 0.0254f << L'm').str().c_str(), config.distanceColor, { bbox.right + 5, drawPositionY });
     }
 }
 
@@ -307,14 +406,12 @@ enum EspId {
     ENEMIES_OCCLUDED
 };
 
-static constexpr bool isInRange(Entity* entity, float maxDistance) noexcept
-{
-    return maxDistance == 0.0f || (entity->getAbsOrigin() - interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer())->getAbsOrigin()).length() * 0.0254f <= maxDistance;
-}
-
 static constexpr bool renderPlayerEsp(Entity* entity, EspId id) noexcept
 {
-    if (config.esp.players[id].enabled && isInRange(entity, config.esp.players[id].maxDistance)) {
+    if (config.esp.players[id].enabled) {
+		const auto localPlayer = interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer());
+		float distance = (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length();
+		if (distance > config.esp.players[id].maxEspDistance) return config.esp.players[id].enabled;
         renderSnaplines(entity, config.esp.players[id]);
         renderEyeTraces(entity, config.esp.players[id]);
         renderPlayerBox(entity, config.esp.players[id]);
@@ -325,7 +422,7 @@ static constexpr bool renderPlayerEsp(Entity* entity, EspId id) noexcept
 
 static constexpr void renderWeaponEsp(Entity* entity) noexcept
 {
-    if (config.esp.weapon.enabled && isInRange(entity, config.esp.weapon.maxDistance)) {
+    if (config.esp.weapon.enabled) {
         renderWeaponBox(entity, config.esp.weapon);
         renderSnaplines(entity, config.esp.weapon);
     }
@@ -333,23 +430,58 @@ static constexpr void renderWeaponEsp(Entity* entity) noexcept
 
 static constexpr void renderEntityEsp(Entity* entity, const Config::Esp::Shared& config, const wchar_t* name) noexcept
 {
-    if (config.enabled && isInRange(entity, config.maxDistance)) {
+    if (config.enabled) {
         renderEntityBox(entity, config, name);
         renderSnaplines(entity, config);
     }
 }
+float white[3] = {1.0,1.0,1.0};
+static constexpr void renderAimbotCircle() noexcept {
+	const auto localPlayer = interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer());
+	const auto activeWeapon = localPlayer->getActiveWeapon();
+	if (!activeWeapon || !activeWeapon->clip())
+		return;
 
+	auto weaponIndex = getWeaponIndex(activeWeapon->itemDefinitionIndex2());
+	if (!weaponIndex)
+		return;
+	if (!config.aimbot[weaponIndex].enabled)
+		weaponIndex = 0;
+	if (!config.aimbot[weaponIndex].aimbotCircle) {
+		return;		
+	}
+	const auto [width, height] = interfaces.surface->getScreenSize();
+	if (config.aimbot[weaponIndex].fov > 90.0f) return;
+	float r = config.aimbot[weaponIndex].fov / 90.0f * width / 2;
+	interfaces.surface->setDrawColor(white, 255);
+	interfaces.surface->drawCircle(width/2, height/2, r-1, r);
+	//interfaces.surface->drawOutlinedCircle(500,500,200,1);
+}
+int roundPeopleCnt = 0;
+wchar_t tmp[200];
+static constexpr void renderRoundPeopleCnt() noexcept {
+	if (!config.misc.showRoundPeople) return;
+	const auto [width, height] = interfaces.surface->getScreenSize();
+	wsprintfW(tmp, L"¸½½üÈËÊý:%d", roundPeopleCnt);
+	interfaces.surface->setDrawColor(white, 255);
+	interfaces.surface->setTextFont(12);
+	interfaces.surface->setTextPosition(width/2-50,height/2+50);
+	interfaces.surface->printText(tmp);
+}
 void Esp::render() noexcept
 {
+	roundPeopleCnt = 0;
     if (interfaces.engine->isInGame()) {
         const auto localPlayer = interfaces.entityList->getEntity(interfaces.engine->getLocalPlayer());
-
+		renderAimbotCircle();
         for (int i = 1; i <= interfaces.engine->getMaxClients(); i++) {
             auto entity = interfaces.entityList->getEntity(i);
             if (!entity || entity == localPlayer || entity->isDormant()
                 || !entity->isAlive())
                 continue;
-
+			if (entity->isEnemy() && (entity->getAbsOrigin() - localPlayer->getAbsOrigin()).length() <= 2000.0) {
+				roundPeopleCnt++;
+			}
             if (!entity->isEnemy()) {
                 if (!renderPlayerEsp(entity, ALLIES_ALL)) {
                     if (entity->isVisible())
@@ -364,7 +496,8 @@ void Esp::render() noexcept
                     renderPlayerEsp(entity, ENEMIES_OCCLUDED);
             }
         }
-
+		renderRoundPeopleCnt();
+		drawList.clear();
         for (int i = interfaces.engine->getMaxClients() + 1; i <= interfaces.entityList->getHighestEntityIndex(); i++) {
             auto entity = interfaces.entityList->getEntity(i);
             if (!entity || entity->isDormant())
@@ -374,64 +507,15 @@ void Esp::render() noexcept
                 renderWeaponEsp(entity);
             else {
                 switch (entity->getClientClass()->classId) {
-                case ClassId::Dronegun: {
-                    renderEntityEsp(entity, config.esp.dangerZone[0], std::wstring{ interfaces.localize->find("#SFUI_WPNHUD_AutoSentry") }.append(L" (").append(std::to_wstring(entity->sentryHealth())).append(L" HP)").c_str());
+                case ClassId::Dronegun:
+                    renderEntityEsp(entity, config.esp.dangerZone[0], interfaces.localize->find("#SFUI_WPNHUD_AutoSentry"));
                     break;
-                }
-                case ClassId::Drone: {
-                    std::wstring text{ L"Drone" };
-                    if (const auto tablet{ interfaces.entityList->getEntityFromHandle(entity->droneTarget()) }) {
-                        if (const auto player{ interfaces.entityList->getEntityFromHandle(tablet->ownerEntity()) }) {
-                            if (PlayerInfo playerInfo; interfaces.engine->getPlayerInfo(player->index(), playerInfo)) {
-                                if (wchar_t name[128]; MultiByteToWideChar(CP_UTF8, 0, playerInfo.name, -1, name, 128)) {
-                                    text += L" -> ";
-                                    text += name;
-                                }
-                            }
-                        }
-                    }
-                    renderEntityEsp(entity, config.esp.dangerZone[1], text.c_str());
-                    break;
-                }
-                case ClassId::Cash:
-                    renderEntityEsp(entity, config.esp.dangerZone[2], L"Cash");
-                    break;
-                case ClassId::LootCrate: {
-                    const auto modelName{ entity->getModel()->name };
-                    if (strstr(modelName, "dufflebag")) {
-                        renderEntityEsp(entity, config.esp.dangerZone[3], L"Cash Dufflebag");
-                    }
-                    break;
-                }
-                case ClassId::BaseCSGrenadeProjectile:
-                    if (strstr(entity->getModel()->name, "flashbang"))
-                        renderEntityEsp(entity, config.esp.projectiles[0], interfaces.localize->find("#SFUI_WPNHUD_Flashbang"));
-                    else
-                        renderEntityEsp(entity, config.esp.projectiles[1], interfaces.localize->find("#SFUI_WPNHUD_HE_Grenade"));
-                    break;
-                case ClassId::BreachChargeProjectile:
-                    renderEntityEsp(entity, config.esp.projectiles[2], interfaces.localize->find("#SFUI_WPNHUD_BreachCharge"));
-                    break;
-                case ClassId::BumpMineProjectile:
-                    renderEntityEsp(entity, config.esp.projectiles[3], interfaces.localize->find("#SFUI_WPNHUD_BumpMine"));
-                    break;
-                case ClassId::DecoyProjectile:
-                    renderEntityEsp(entity, config.esp.projectiles[4], interfaces.localize->find("#SFUI_WPNHUD_Decoy"));
-                    break;
-                case ClassId::MolotovProjectile:
-                    renderEntityEsp(entity, config.esp.projectiles[5], interfaces.localize->find("#SFUI_WPNHUD_Molotov"));
-                    break;
-                case ClassId::SensorGrenadeProjectile:
-                    renderEntityEsp(entity, config.esp.projectiles[6], interfaces.localize->find("#SFUI_WPNHUD_TAGrenade"));
-                    break;
-                case ClassId::SmokeGrenadeProjectile:
-                    renderEntityEsp(entity, config.esp.projectiles[7], interfaces.localize->find("#SFUI_WPNHUD_SmokeGrenade"));
-                    break;
-                case ClassId::SnowballProjectile:
-                    renderEntityEsp(entity, config.esp.projectiles[8], interfaces.localize->find("#SFUI_WPNHUD_Snowball"));
+                case ClassId::Drone:
+                    renderEntityEsp(entity, config.esp.dangerZone[1], L"Drone");
                     break;
                 }
             }   
         }
+		renderWeaponNameList(config.esp.weapon);
     }
 }
